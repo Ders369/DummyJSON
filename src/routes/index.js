@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import forceHTTPS from '../middleware/force-https.js';
 import staticRoutes from './static.js';
 import authRoutes from './auth.js';
 import cartRoutes from './cart.js';
@@ -21,7 +20,7 @@ import redirectRoutes from './redirect.js';
 const router = Router();
 
 // static page routes
-router.use('/', forceHTTPS, staticRoutes);
+router.use('/', staticRoutes);
 
 // static resource routes
 router.use('/auth', authRoutes);

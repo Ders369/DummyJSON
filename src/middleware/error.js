@@ -1,6 +1,8 @@
 import { log, logError } from '../helpers/logger.js';
 import { isEmpty } from '../utils/util.js';
 
+const { LOG_ENABLED } = process.env;
+
 /* eslint-disable no-console */
 const commonErrorMessages = [
   'jwt expired',
@@ -56,13 +58,17 @@ const errorMiddleware = (err, req, res, next) => {
   // Log common errors
   const isCommonError = commonErrorMessages.find(msg => errorMessage.includes(msg));
   if (isCommonError) {
-    log('Common Error', { error: errorMessage, requestData: buildRequestMetaData(req) });
+    if (LOG_ENABLED) {
+      log('Common Error', { error: errorMessage, requestData: buildRequestMetaData(req) });
+    }
     errorLogged = true;
   }
 
   // Log 404 errors specifically
   if (err.status === 404) {
-    log('404 Error', { error: err.message || err });
+    if (LOG_ENABLED) {
+      log('404 Error', { error: err.message || err });
+    }
     errorLogged = true;
   }
 

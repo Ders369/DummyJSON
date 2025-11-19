@@ -1,6 +1,5 @@
-import fs from 'node:fs';
+import fs from 'node:fs/promises';
 import path from 'node:path';
-import v8 from 'node:v8';
 import { v4 } from 'uuid';
 import { REQUIRED_ENV_VARIABLES, OPTIONAL_ENV_VARIABLES, httpCodes } from '../constants/index.js';
 import { logWarn, logError } from '../helpers/logger.js';
@@ -20,8 +19,6 @@ const data = {
 };
 
 export const dataInMemory = data;
-
-export const isDev = process.env.NODE_ENV === 'development';
 
 export const deepFreeze = obj => {
   Object.freeze(obj);
@@ -44,23 +41,40 @@ export const deepFreeze = obj => {
 };
 
 export const loadDataInMemory = async () => {
-  const baseDir = './cache';
+  const baseDir = './database';
 
-  function loadV8(name) {
-    const filePath = path.join(baseDir, `${name}.v8`);
-    const buffer = fs.readFileSync(filePath);
-    return v8.deserialize(buffer);
-  }
+  const productsPath = path.join(baseDir, 'products.json');
+  const cartsPath = path.join(baseDir, 'carts.json');
+  const usersPath = path.join(baseDir, 'users.json');
+  const quotesPath = path.join(baseDir, 'quotes.json');
+  const todosPath = path.join(baseDir, 'todos.json');
+  const postsPath = path.join(baseDir, 'posts.json');
+  const commentsPath = path.join(baseDir, 'comments.json');
+  const recipesPath = path.join(baseDir, 'recipes.json');
 
-  // Load each resource
-  data.products = loadV8('products');
-  data.carts = loadV8('carts');
-  data.users = loadV8('users');
-  data.quotes = loadV8('quotes');
-  data.todos = loadV8('todos');
-  data.posts = loadV8('posts');
-  data.comments = loadV8('comments');
-  data.recipes = loadV8('recipes');
+  const paths = [
+    fs.readFile(productsPath, 'utf-8'),
+    fs.readFile(cartsPath, 'utf-8'),
+    fs.readFile(usersPath, 'utf-8'),
+    fs.readFile(quotesPath, 'utf-8'),
+    fs.readFile(todosPath, 'utf-8'),
+    fs.readFile(postsPath, 'utf-8'),
+    fs.readFile(commentsPath, 'utf-8'),
+    fs.readFile(recipesPath, 'utf-8'),
+  ];
+
+  const [productsStr, cartsStr, usersStr, quotesStr, todosStr, postsStr, commentsStr, recipesStr] = await Promise.all(
+    paths,
+  );
+
+  data.products = JSON.parse(productsStr);
+  data.carts = JSON.parse(cartsStr);
+  data.users = JSON.parse(usersStr);
+  data.quotes = JSON.parse(quotesStr);
+  data.todos = JSON.parse(todosStr);
+  data.posts = JSON.parse(postsStr);
+  data.comments = JSON.parse(commentsStr);
+  data.recipes = JSON.parse(recipesStr);
 
   data.categoryList = [...new Set(data.products.map(p => p.category))];
   data.categories = getSluggedData(data.categoryList, 'products', 'category');
