@@ -10,6 +10,7 @@ import delayResponse from './delay-response.js';
 import rateLimiter from './rate-limiter.js';
 import wwwRedirect from './www-redirect.js';
 import removeHeaders from './remove-headers.js';
+import { requestContextMiddleware } from '../utils/request-context.js';
 
 // for parsing application/json
 const expressJson = express.json({ limit: '300kb' });
@@ -23,6 +24,8 @@ const helmetConfig = {
 
 function injectMiddleWares(app) {
   app.set('trust proxy', true);
+  // Store request in AsyncLocalStorage context early in the middleware chain
+  app.use(requestContextMiddleware);
   app.use(setClientInfo);
   app.use(rateLimiter);
   app.use(helmet(helmetConfig));

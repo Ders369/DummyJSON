@@ -6,6 +6,8 @@ import { log, logError } from './src/helpers/logger.js';
 import { handleClusterExit, handleClusterMessage, logCounts } from './src/utils/cluster.js';
 import { validateEnvVar } from './src/utils/util.js';
 import { setupCRONJobs } from './src/utils/cron-jobs.js';
+import { getCurrentRequest } from './src/utils/request-context.js';
+import { buildRequestMetaData } from './src/middleware/error.js';
 
 const require = createRequire(import.meta.url);
 const { version } = require('./package.json');
@@ -49,10 +51,21 @@ if (cluster.isMaster) {
   await import('./worker.js');
 
   process.on('uncaughtException', err => {
-    logError(`[Worker] Error in worker ${process.pid}: ${err.message}`, { error: err.stack });
+    // Get the current request from AsyncLocalStorage context
+    const currentRequest = getCurrentRequest();
+    const requestData = currentRequest ? buildRequestMetaData(currentRequest) : null;
 
-    // Send the full stack trace to the master process
-    process.send({ type: 'error', error: err.stack });
+    logError(`[Worker] Error in worker ${process.pid}: ${err.message}`, {
+      error: err.stack,
+      requestData,
+    });
+
+    // Send the full stack trace and request data to the master process
+    process.send({
+      type: 'error',
+      error: err.stack,
+      requestData,
+    });
 
     // After handling the error, let it die naturally
     process.exit(1);

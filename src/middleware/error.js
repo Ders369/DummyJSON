@@ -94,7 +94,9 @@ const errorMiddleware = (err, req, res, next) => {
 
 export default errorMiddleware;
 
-function buildRequestMetaData(req) {
+export function buildRequestMetaData(req) {
+  if (!req) return null;
+
   const { clientInfo } = req;
   const { ip, userAgent } = clientInfo || {};
 
