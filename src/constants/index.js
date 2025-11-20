@@ -10,7 +10,6 @@ export const OPTIONAL_ENV_VARIABLES = [
   'AWS_BUCKET_NAME',
   'LOG_ENABLED',
   'BANNER_CONTENT',
-  'NUM_WORKERS',
   'STATS',
 ];
 

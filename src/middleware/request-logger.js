@@ -1,13 +1,16 @@
-import cluster from 'node:cluster';
 import onFinished from 'on-finished';
 import onHeaders from 'on-headers';
 import { isRequestInWhitelist } from '../helpers/index.js';
-import { logger } from '../helpers/logger.js';
+import { log } from '../helpers/logger.js';
+import { timeDifference } from '../utils/util.js';
 
 const { LOG_ENABLED } = process.env;
 
-let requestCount = 0;
-let customRequestCount = 0;
+const counts = {
+  overallRequestCount: 0,
+  customRouteCount: 0,
+  pathCounts: {},
+};
 
 function requestLogger(req, res, next) {
   if (isRequestInWhitelist(req)) {
@@ -15,12 +18,15 @@ function requestLogger(req, res, next) {
     return;
   }
 
-  requestCount += 1;
+  counts.overallRequestCount += 1;
 
-  const requestURL = req.originalUrl || req.url;
+  const requestURL = req.originalUrl;
   if (requestURL.startsWith('/c/') || requestURL.startsWith('/custom-response')) {
-    customRequestCount += 1;
+    counts.customRouteCount += 1;
   }
+
+  const fullPath = requestURL.split('?')[0]?.toLowerCase();
+  counts.pathCounts[fullPath] = (counts.pathCounts[fullPath] || 0) + 1;
 
   if (!LOG_ENABLED) {
     next();
@@ -44,22 +50,17 @@ function requestLogger(req, res, next) {
     const { ip, userAgent } = clientInfo || {};
 
     const logObject = {
-      timestamp: new Date().toISOString(),
-      level: 'info',
-      message: 'HTTP Request',
-      meta: {
-        method: req.method,
-        status: getResponseStatus(req, res),
-        total_time_ms: getTotalTime(req, res),
-        response_time_ms: getResponseTime(req, res),
-        ip,
-        url: requestURL,
-        referrer: referrer || '-',
-        user_agent: userAgent || '-',
-      },
+      method: req.method,
+      status: getResponseStatus(req, res),
+      total_time_ms: getTotalTime(req, res),
+      response_time_ms: getResponseTime(req, res),
+      ip,
+      url: requestURL,
+      referrer: referrer || '-',
+      user_agent: userAgent || '-',
     };
 
-    logger.info(logObject);
+    log('HTTP Request', logObject);
   }
 
   // record response start
@@ -122,18 +123,12 @@ function isHeadersSent(res) {
 }
 
 function startCountLogger() {
-  if (!cluster.isWorker) return;
+  const startTime = Date.now();
 
   setInterval(() => {
-    process.send({
-      type: 'request_counts',
-      requestCount,
-      customRequestCount,
-    });
-
-    requestCount = 0;
-    customRequestCount = 0;
-  }, 30 * 1000 /* 30 Seconds */);
+    const diff = timeDifference(startTime, Date.now());
+    log(`[Logger - Request Counts] ${diff}`, counts);
+  }, 60 * 1000 /* 60 seconds */);
 }
 
 startCountLogger();

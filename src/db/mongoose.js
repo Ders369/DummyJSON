@@ -17,9 +17,6 @@ export const connectDB = async () => {
     await mongoose.connect(MONGODB_URI, dbOptions);
   } catch (error) {
     logError('Failed to connect to MongoDB', { error });
-
-    // Instead of exiting, we'll just log the error
-    // process.exit(1);
   }
 };
 
@@ -32,7 +29,7 @@ export const disconnectDB = async () => {
 };
 
 mongoose.connection.on('connected', () => {
-  log('Mongoose connected to DB', { workerId: process.pid });
+  log('Mongoose connected to DB');
 });
 
 mongoose.connection.on('error', error => {
@@ -41,19 +38,6 @@ mongoose.connection.on('error', error => {
 
 mongoose.connection.on('disconnected', () => {
   // Instead of exiting, we'll attempt to reconnect
-  logError('Mongoose disconnected from DB - Attempting to reconnect...', { workerId: process.pid });
+  logError('Mongoose disconnected from DB - Attempting to reconnect...');
   setTimeout(connectDB, 5000); // Try to reconnect after 5 seconds
-});
-
-// If node exits, terminate mongoose connection
-process.on('SIGINT', async () => {
-  try {
-    await disconnectDB();
-
-    log('Node is down. So is Mongoose.', { workerId: process.pid });
-    process.exit(0);
-  } catch (error) {
-    logError('Error while closing Mongoose connection', { error });
-    process.exit(1);
-  }
 });

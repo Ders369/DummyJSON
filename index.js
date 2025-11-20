@@ -1,73 +1,48 @@
-import os from 'node:os';
-import cluster from 'node:cluster';
-import { createRequire } from 'node:module';
-import { connectDB } from './src/db/mongoose.js';
-import { log, logError } from './src/helpers/logger.js';
-import { handleClusterExit, handleClusterMessage, logCounts } from './src/utils/cluster.js';
-import { validateEnvVar } from './src/utils/util.js';
+import express from 'express';
+import { connectDB, disconnectDB } from './src/db/mongoose.js';
+import injectMiddleWares from './src/middleware/index.js';
+import errorMiddleware from './src/middleware/error.js';
+import authUser from './src/middleware/auth.js';
+import routes from './src/routes/index.js';
+import { log } from './src/helpers/logger.js';
+import { validateEnvVar, loadDataInMemory } from './src/utils/util.js';
 import { setupCRONJobs } from './src/utils/cron-jobs.js';
-import { getCurrentRequest } from './src/utils/request-context.js';
-import { buildRequestMetaData } from './src/middleware/error.js';
+import { registerFatalHandlers, registerShutdownHandlers } from './src/utils/fatal-handler.js';
 
-const require = createRequire(import.meta.url);
-const { version } = require('./package.json');
+const { PORT = 8888, NODE_ENV } = process.env;
 
-const { PORT = 8888, NUM_WORKERS = 1, NODE_ENV } = process.env;
+validateEnvVar();
 
-const numCPUs = os.cpus().length;
-const maxWorkers = Math.min(NUM_WORKERS, numCPUs);
+const app = express();
 
-async function setupMasterProcess() {
-  try {
-    validateEnvVar();
+injectMiddleWares(app);
 
-    await connectDB();
+await connectDB();
 
-    setupCRONJobs();
+setupCRONJobs();
 
-    logCounts();
+loadDataInMemory();
 
-    log(`[Master] ${process.pid} running with ${maxWorkers}/${numCPUs} workers`);
-    log(`[Master][${NODE_ENV}] App v${version} running at http://localhost:${PORT}`);
+app.set('view engine', 'ejs');
 
-    forkWorkers(maxWorkers);
-  } catch (error) {
-    logError(`[Master] Critical error: ${error.message}`, { error: error.stack });
-    process.exit(1);
-  }
-}
+// serving static files
+app.use('/public', express.static('public'));
 
-function forkWorkers(numWorkers) {
-  for (let i = 0; i < numWorkers; i++) cluster.fork();
+// routes
+app.use('/', routes);
 
-  cluster.on('exit', (worker, code, signal) => handleClusterExit(worker, code, signal));
-  cluster.on('message', (worker, message) => handleClusterMessage(worker, message));
-}
+// routes with authorization
+app.use('/auth/', authUser, routes);
 
-// Main execution block
-if (cluster.isMaster) {
-  setupMasterProcess();
-} else {
-  await import('./worker.js');
+app.get('*', (req, res) => res.status(404).send());
 
-  process.on('uncaughtException', err => {
-    // Get the current request from AsyncLocalStorage context
-    const currentRequest = getCurrentRequest();
-    const requestData = currentRequest ? buildRequestMetaData(currentRequest) : null;
+app.use(errorMiddleware);
 
-    logError(`[Worker] Error in worker ${process.pid}: ${err.message}`, {
-      error: err.stack,
-      requestData,
-    });
+// Keep a reference to server so we can close it on SIGINT/SIGTERM
+const server = app.listen(PORT, () => {
+  log(`[${NODE_ENV}] App running at http://localhost:${PORT}`);
+});
 
-    // Send the full stack trace and request data to the master process
-    process.send({
-      type: 'error',
-      error: err.stack,
-      requestData,
-    });
-
-    // After handling the error, let it die naturally
-    process.exit(1);
-  });
-}
+// Process-level handlers
+registerFatalHandlers();
+registerShutdownHandlers({ disconnectDB, server });

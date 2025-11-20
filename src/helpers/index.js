@@ -53,9 +53,7 @@ export const verifyPostHandler = id => {
 };
 
 export const isRequestInWhitelist = req => {
-  const url = req.originalUrl || req.url;
-
-  return requestWhitelist.find(u => url.includes(u));
+  return requestWhitelist.some(u => req.originalUrl.includes(u));
 };
 
 // Configure multer to use disk storage for temporary file handling

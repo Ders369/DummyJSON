@@ -236,3 +236,81 @@ export const timeDifference = (startDateMS, endDateMS) => {
 
   return result;
 };
+
+export const sendPushNotification = ({ title, message }) => {
+  const { PUSHOVER_USER_KEY, PUSHOVER_API_TOKEN } = process.env;
+  if (!PUSHOVER_USER_KEY || !PUSHOVER_API_TOKEN) return;
+
+  const postData = JSON.stringify({
+    token: PUSHOVER_API_TOKEN,
+    user: PUSHOVER_USER_KEY,
+    title,
+    message,
+  });
+
+  const options = {
+    hostname: 'api.pushover.net',
+    port: 443,
+    path: '/1/messages.json',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': postData.length,
+    },
+  };
+
+  const req = https.request(options);
+
+  req.on('error', e => {
+    logError('Failed to send push notification', { error: e });
+  });
+
+  req.write(postData);
+  req.end();
+};
+
+export const sendProcessErrorPushNotification = (errorDetails, requestData = null) => {
+  const errorSummary = (errorDetails || '').split('\n')[0] || 'Unknown error';
+  let message = `Error: ${errorSummary}`;
+
+  // Add request data if available
+  if (requestData) {
+    const requestInfo = formatRequestDataForNotification(requestData);
+    message += `\n\nRequest Details:\n${requestInfo}`;
+  }
+
+  // Pushover has a 1024 character limit, truncate if needed
+  if (message.length > 1024) {
+    const truncatedMessage = message.substring(0, 1024 - 3);
+    message = `${truncatedMessage}...`;
+  }
+
+  sendPushNotification({ title: `Error in Process ${process.pid}`, message });
+};
+
+function formatRequestDataForNotification(requestData) {
+  const parts = [];
+
+  if (requestData.method) parts.push(`Method: ${requestData.method}`);
+  if (requestData.originalUrl || requestData.path) {
+    parts.push(`URL: ${requestData.originalUrl || requestData.path}`);
+  }
+  if (requestData.ip) parts.push(`IP: ${requestData.ip}`);
+  if (requestData.userAgent) parts.push(`User-Agent: ${requestData.userAgent}`);
+  if (requestData.query && Object.keys(requestData.query).length > 0) {
+    parts.push(`Query: ${JSON.stringify(requestData.query)}`);
+  }
+  if (requestData.params && Object.keys(requestData.params).length > 0) {
+    parts.push(`Params: ${JSON.stringify(requestData.params)}`);
+  }
+  if (requestData.body && Object.keys(requestData.body).length > 0) {
+    const bodyStr = JSON.stringify(requestData.body);
+    // Limit body size in notification
+    const maxBodyLength = 200;
+    parts.push(`Body: ${bodyStr.length > maxBodyLength ? bodyStr.substring(0, maxBodyLength) + '...' : bodyStr}`);
+  }
+  if (requestData.referer) parts.push(`Referer: ${requestData.referer}`);
+  if (requestData.timestamp) parts.push(`Time: ${requestData.timestamp}`);
+
+  return parts.join('\n');
+}
